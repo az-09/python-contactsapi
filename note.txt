@@ -1,6 +1,6 @@
 - pip install pipenv
 - pipenv shell
-- pipenv install django djangorestframework pyjwt python-dotenv
+- pipenv install django djangorestframework pyjwt python-dotenv django-cors-headers django_heroku gunicorn drf-yasg
 - django-admin startproject contactsapi
 - move pipfile and pipfile.lock to contactsapi
 - cd contactsapi
@@ -302,7 +302,23 @@ https://www.youtube.com/watch?v=7-4je7mPjtU
 import django_heroku
 django_heroku.settings(locals())
 ...
+INSTALLED_APPS = [
+    ...
+    'corsheaders'
+]
+...
+MIDDLEWARE = [
+    ...
+    'corsheaders.middleware.CorsMiddleware',
+]
+...
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+...
+CORS_ORGIN_WHITELIST = [
+    'http://localhost:3000'
+]
+
+
 
 - create Procfile on root
 release: python manage.py makemigrations --no-input
@@ -310,7 +326,8 @@ release: python manage.py migrate --no-input
 
 web: gunicorn contactsapi.wsgi
 
-
 - push to github
+
+- heroku website -> deployment method -> github -> select a repository -> Check wait for CI to pass before deploy
 
 
