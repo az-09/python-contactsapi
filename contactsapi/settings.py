@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'authentication',
     'contacts',
     'drf_yasg',
+    'corsheaders'
 ]
 
 MIDDLEWARE = [
@@ -57,6 +58,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'contactsapi.urls'
@@ -156,3 +158,7 @@ SWAGGER_SETTINGS = {
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 django_heroku.settings(locals())
+
+CORS_ORGIN_WHITELIST = [
+    'http://localhost:3000'
+]
