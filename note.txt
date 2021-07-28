@@ -289,3 +289,26 @@ SWAGGER_SETTINGS = {
         }
     }
 }
+
+
+Video 6 Deploying a Django API to Heroku. Django Rest Framework API Project Tutorial
+https://www.youtube.com/watch?v=7-4je7mPjtU
+
+
+- pipenv install django_heroku gunicorn
+
+- settings.py
+...
+import django_heroku
+django_heroku.settings(locals())
+
+- create Procfile on root
+release: python manage.py makemigrations --no-input
+release: python manage.py migrate --no-input
+
+web: gunicorn contactsapi.wsgi
+
+
+- push to github
+
+
