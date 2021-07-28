@@ -1,0 +1,291 @@
+- pip install pipenv
+- pipenv shell
+- pipenv install django djangorestframework pyjwt python-dotenv
+- django-admin startproject contactsapi
+- move pipfile and pipfile.lock to contactsapi
+- cd contactsapi
+- code . -> open new VS code
+- python manage.py runserver
+
+- settings.py
+INSTALLED_APPS = [
+    ...
+    'rest_framework'
+]
+
+- python manage.py startapp authentication
+
+- settings.py
+INSTALLED_APPS = [
+    ...
+    'authentication'
+]
+
+- views.py
+from django.shortcuts import render
+from rest_framework.generics import GenericAPIView
+from .serializers import UserSerializer
+from rest_framework.response import Response
+from rest_framework import status
+
+class RegisterView(GenericAPIView):
+    serializer_class = UserSerializer
+
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+
+        if serializer.is_valid():  # call validate in UserSerializer
+            serializer.save()  # call create in UserSerializer
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+- serializers.py
+from django.db.models import fields
+from rest_framework import serializers
+from django.contrib.auth.models import User
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(
+        max_length=65, min_length=9, write_only=True)
+    email = serializers.EmailField(max_length=255, min_length=4)
+    first_name = serializers.CharField(max_length=255, min_length=2)
+    last_name = serializers.CharField(max_length=255, min_length=2)
+
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'email', 'password']
+
+    def validate(self, attrs):  # before save it
+        email = attrs.get('email', '')
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError(
+                {'email':  ('Email is already in use')})
+        return super().validate(attrs)
+
+    def create(self, validated_data):
+        return User.objects.create_user(**validated_data)
+
+# if User.objects.create_user(validated_data) if def create
+# because attrs gets dumpped to the first field "username"
+    {
+        "username": "{'username': 'test1', 'first_name': 'first1', 'last_name': 'last1', 'email': 'test1@gmail.com', 'password': 'password1'}",
+        "first_name": "",
+        "last_name": "",
+        "email": ""
+    }
+# must use User.objects.create_user(**validated_data) 
+    {
+        "username": "test1",
+        "first_name": "first1",
+        "last_name": "last1",
+        "email": "test1@gmail.com"
+    }
+
+- urls.py
+from django.urls import path
+from .views import RegisterView
+
+urlpatterns = [
+    path('register', RegisterView.as_view()),
+]
+
+
+- main urls.py
+...
+from django.urls import path, include
+
+urlpatterns = [
+    ...
+    path('api/auth/', include('authentication.urls'))
+]
+
+
+Video 3 Setting up JWT Authentication Scheme and User Login. Django Rest Framework REST API Project
+https://www.youtube.com/watch?v=LWDDDU8e-74
+
+- backends.py
+import jwt
+from rest_framework import authentication, exceptions
+from django.conf import settings
+from django.contrib.auth.models import User
+
+class JWTAuthentication(authentication.BaseAuthentication):
+    def authenticate(self, request):
+        auth_data = authentication.get_authorization_header(request)
+
+        if not auth_data:
+            return None
+
+        prefix, token = auth_data.decode('utf-8').split(' ')
+
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY)
+
+            user = User.objects.get(username=payload['username'])
+
+            return (user, token)
+        except jwt.DecodeError as identifier:
+            raise exceptions.AuthenticationFailed('Your token is invalid')
+        except jwt.ExpiredSignatureError as identifier:
+            raise exceptions.AuthenticationFailed('Your token is expired')
+
+- views.py
+...
+from django.conf import settings
+from django.contrib import auth
+import jwt
+...
+
+class LoginView(GenericAPIView):
+    def post(self, request):
+        data = request.data
+        username = data.get('username', '')
+        password = data.get('password', '')
+        user = auth.authenticate(username=username, password=password)
+
+        if user:
+            auth_token = jwt.encode(
+                {'username': user.username}, settings.JWT_SECRET_KEY)
+
+            serializer = UserSerializer(user)
+            data = {
+                'user': serializer.data,
+                'token': auth_token
+            }
+            return Response(data, status=status.HTTP_200_OK)
+        return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+- settings.py
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
+JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'authentication.backends.JWTAuthentication',
+    )
+}
+
+Video 4 Create, Read, Update, Delete Contacts. Django Rest Framework API Project
+
+- python manage.py startapp contacts
+
+- models.py
+
+from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.deletion import CASCADE
+# Create your models here.
+
+
+class Contact(models.Model):
+    owner = models.ForeignKey(to=User, on_delete=models.CASCADE)
+    country_code = models.CharField(max_length=30)
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+    phone_number = models.CharField(max_length=30)
+    contact_picture = models.URLField(null=True)
+    is_favorite = models.BooleanField(default=False)
+
+- python manage.py makemigrations
+
+- python manage.py migrate
+
+- views.py
+from contacts.serializers import ContactSerializer
+from django.shortcuts import render
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from .models import Contact
+from .serializers import ContactSerializer
+from rest_framework import permissions
+
+class ContactList(ListCreateAPIView):
+    serializer_class = ContactSerializer
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def perform_create(self, serializer):  # to overwrite owner
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        return Contact.objects.filter(owner=self.request.user)
+
+
+class ContactDetailView(RetrieveUpdateDestroyAPIView):
+    serializer_class = ContactSerializer
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    lookup_field = 'id' #/contacts/1
+
+    def get_queryset(self):
+        return Contact.objects.filter(owner=self.request.user)
+
+- urls.py
+from django.urls import path
+from .views import ContactList, ContactDetailView
+
+urlpatterns = [
+    path('', ContactList.as_view()),
+    path('<int:id>', ContactDetailView.as_view()),
+]
+
+- main urls.py
+urlpatterns = [
+    ...
+    path('api/contacts/', include('contacts.urls')),
+]
+
+
+Video 5 API Documentation using Swagger UI/REDOC. Django Rest Framework API Project Tutorial
+https://www.youtube.com/watch?v=xlcYLlndqz4
+
+- pipenv install drf-yasg
+
+- settings.py
+INSTALLED_APPS = [
+    ...
+    'drf_yasg'
+]
+
+
+- main urls.py
+...
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="Contact List API",
+        default_version='v1',
+        description="API for contacts",
+        terms_of_service="https://www.ourapp.com/policies/terms/",
+        contact=openapi.Contact(email="contact@contacts.local"),
+        license=openapi.License(name="Test License"),
+    ),
+    public=True,
+    permission_classes=(permissions.AllowAny,),
+)
+
+urlpatterns = [
+    ...
+    path('', schema_view.with_ui('swagger',
+         cache_timeout=0), name='schema-swagger-ui'),
+    path('redoc/', schema_view.with_ui('redoc',
+         cache_timeout=0), name='schema-redoc'),
+]
+
+# settings.py
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Auth Token eg [Bearer (JWT)]': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    }
+}
